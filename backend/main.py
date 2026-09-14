@@ -17,7 +17,11 @@ async def upload_file(file: UploadFile = File(...)):
         f.write(contents)
 
     extracted_text = extract_text_from_pdf(file_path)
-    print(extracted_text)
+    chunks = chunk_text(extracted_text)
+    print(f"Created {len(chunks)} chunks")
+    for i, chunk in enumerate(chunks):
+        print(f"--- Chunk {i} ---")
+        print(chunk)
 
     return {"filename": file.filename, "size": len(contents)}
 
@@ -28,3 +32,12 @@ def extract_text_from_pdf(file_path: str) -> str:
     for page in reader.pages:
         text += page.extract_text() + "\n"
     return text
+
+# function to create chunks of text
+def chunk_text(text, chunk_size = 150):
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i:i + chunk_size])
+        chunks.append(chunk)
+    return chunks
