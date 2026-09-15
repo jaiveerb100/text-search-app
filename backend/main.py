@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 from pypdf import PdfReader
 from dotenv import load_dotenv
 from openai import OpenAI
+import psycopg2
+from pgvector.psycopg2 import register_vector
 import os
 
 load_dotenv()
@@ -25,10 +27,10 @@ async def upload_file(file: UploadFile = File(...)):
     extracted_text = extract_text_from_pdf(file_path)
     chunks = chunk_text(extracted_text)
     embeddings = [get_embedding(chunk) for chunk in chunks]
+    for chunk, embedding in zip(chunks, embeddings):
+        store_chunk(file.filename, chunk, embedding)
 
-
-    print(f"Generated {len(embeddings)} embeddings")
-    print(f"First embedding has {len(embeddings[0])} dimensions")
+    print(f"Stored {len(chunks)} chunks in the database")
 
     return {"filename": file.filename, "size": len(contents)}
 
@@ -55,3 +57,19 @@ def get_embedding(text: str) -> list[float]:
         input=text
     )
     return response.data[0].embedding
+
+def get_db_connection():
+    conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+    register_vector(conn)
+    return conn
+
+def store_chunk(document_name: str, chunk_text: str, embedding: list[float]):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO chunks (document_name, chunk_text, embedding) VALUES (%s, %s, %s)",
+        (document_name, chunk_text, embedding)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
