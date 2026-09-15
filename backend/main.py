@@ -1,5 +1,11 @@
 from fastapi import FastAPI, UploadFile, File
 from pypdf import PdfReader
+from dotenv import load_dotenv
+from openai import OpenAI
+import os
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -18,10 +24,11 @@ async def upload_file(file: UploadFile = File(...)):
 
     extracted_text = extract_text_from_pdf(file_path)
     chunks = chunk_text(extracted_text)
-    print(f"Created {len(chunks)} chunks")
-    for i, chunk in enumerate(chunks):
-        print(f"--- Chunk {i} ---")
-        print(chunk)
+    embeddings = [get_embedding(chunk) for chunk in chunks]
+
+
+    print(f"Generated {len(embeddings)} embeddings")
+    print(f"First embedding has {len(embeddings[0])} dimensions")
 
     return {"filename": file.filename, "size": len(contents)}
 
@@ -41,3 +48,10 @@ def chunk_text(text, chunk_size = 150):
         chunk = " ".join(words[i:i + chunk_size])
         chunks.append(chunk)
     return chunks
+
+def get_embedding(text: str) -> list[float]:
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return response.data[0].embedding
