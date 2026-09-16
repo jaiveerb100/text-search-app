@@ -34,6 +34,11 @@ async def upload_file(file: UploadFile = File(...)):
 
     return {"filename": file.filename, "size": len(contents)}
 
+@app.get("/search")
+def search(q: str):
+    results = search_chunks(q)
+    return {"results": [{"document": r[0], "text": r[1], "distance": r[2]} for r in results]}
+
 # function to extract text from PDF
 def extract_text_from_pdf(file_path: str) -> str:
     reader = PdfReader(file_path)
@@ -73,3 +78,18 @@ def store_chunk(document_name: str, chunk_text: str, embedding: list[float]):
     conn.commit()
     cur.close()
     conn.close()
+
+def search_chunks(query: str, limit: int = 5):
+    query_embedding = get_embedding(query)
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT document_name, chunk_text, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
+        (query_embedding, limit)
+    )
+    results = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    return results
