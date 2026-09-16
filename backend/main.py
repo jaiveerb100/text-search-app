@@ -4,10 +4,12 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import psycopg2
 from pgvector.psycopg2 import register_vector
+from anthropic import Anthropic
 import os
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 app = FastAPI()
 
@@ -37,7 +39,13 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/search")
 def search(q: str):
     results = search_chunks(q)
-    return {"results": [{"document": r[0], "text": r[1], "distance": r[2]} for r in results]}
+    chunk_texts = [r[1] for r in results]
+    answer = generate_answer(q, chunk_texts)
+    
+    return {
+        "answer": answer,
+        "sources": [{"document": r[0], "text": r[1], "distance": r[2]} for r in results]
+    }
 
 # function to extract text from PDF
 def extract_text_from_pdf(file_path: str) -> str:
@@ -93,3 +101,20 @@ def search_chunks(query: str, limit: int = 5):
     conn.close()
     
     return results
+
+def generate_answer(question: str, chunks: list[str]) -> str:
+    context = "\n\n".join(chunks)
+    
+    
+    message = anthropic_client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=500,
+        messages=[
+            {
+                "role": "user",
+                "content": f"Answer the question using only the context below. If the answer isn't in the context, say so.\n\nContext:\n{context}\n\nQuestion: {question}"
+            }
+        ]
+    )
+
+    return message.content[0].text
